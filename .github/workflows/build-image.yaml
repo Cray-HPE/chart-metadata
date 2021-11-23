@@ -12,6 +12,9 @@ on:
     branches:
       - main
 
+env:
+  registry: artifactory.algol60.net/csm-docker
+
 jobs:
   docker:
     runs-on: ubuntu-latest
@@ -23,8 +26,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: |
-            artifactory.algol60.net/csm-docker/${{ startsWith(github.ref, 'refs/tags/v') && 'stable' || 'unstable' }}/chart-metadata
+          images: ${{ env.registry }}/${{ startsWith(github.ref, 'refs/tags/v') && 'stable' || 'unstable' }}/chart-metadata
+          labels: |
+            org.opencontainers.image.vendor=Hewlett Packard Enterprise Development LP
           tags: |
             type=schedule
             type=ref,event=branch
