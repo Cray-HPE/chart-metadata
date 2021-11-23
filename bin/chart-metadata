@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+
+# Copyright 2021 Hewlett Packard Enterprise Development LP
+
+from io import StringIO
+from pathlib import Path
+
+import ruamel.yaml
+
+
+class YamlFile:
+
+    def __init__(self, filename):
+        self.filename = Path(filename)
+        self._yaml = ruamel.yaml.YAML()
+        self._yaml.indent(mapping=2, sequence=4, offset=2)
+
+    def exists(self):
+        return self.filename.exists() and self.filename.is_file()
+
+    def load(self):
+        return self._yaml.load(self.filename) or {}
+
+    def dump(self, obj):
+        return self._yaml.dump(obj, self.filename)
+
+    def dumps(self, obj):
+        s = StringIO()
+        self._yaml.dump(obj, s)
+        return s.getvalue()
+
+
+class Annotations:
+    IMAGES = 'artifacthub.io/images'
+    LICENSE = 'artifacthub.io/license'
+
+    _yaml = ruamel.yaml.YAML()
+
+    @classmethod
+    def loads(cls, s):
+        return cls._yaml.load(s)
+
+    @classmethod
+    def dumps(cls, obj):
+        s = StringIO()
+        cls._yaml.dump(obj, s)
+        return s.getvalue()
+
+    @classmethod
+    def get(cls, chart, annotation):
+        return chart.get('annotations', {}).get(annotation, '')
+
+    @classmethod
+    def set(cls, chart, annotation, value):
+        chart.setdefault('annotations', {})[annotation] = value
+
+    @classmethod
+    def get_yaml(cls, chart, annotation):
+        return cls.loads(cls.get(chart, annotation))
+
+    @classmethod
+    def set_yaml(cls, chart, annotation, value):
+        cls.set(chart, annotation, cls.dumps(value))
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--name', help="Set chart name")
+    parser.add_argument('-v', '--version', help="Set chart version")
+    parser.add_argument('-a', '--app-version', help="Set chart appVersion")
+    parser.add_argument('-i', '--image', nargs=2, metavar=('NAME', 'IMAGE'), action='append', default=[], help=f"Set or update {Annotations.IMAGES} annotation")
+    parser.add_argument('-l', '--license', help=f"Set {Annotations.LICENSE} annotation")
+    parser.add_argument('--cray-service-globals', action='store_true', default=False, help="Update global values expected by the cray-service base chart")
+    parser.add_argument('chartdir', metavar='CHART-DIR', type=Path, nargs='?', default=Path('.'), help="Chart directory")
+    args = parser.parse_args()
+
+    # Read Chart.yaml and values.yaml (as necessary)
+    if not (args.chartdir.exists() and args.chartdir.is_dir()):
+        parser.error(f'{args.chartdir}: No such directory')
+
+    chart_yaml = YamlFile(args.chartdir / 'Chart.yaml')
+    if not chart_yaml.exists():
+        parser.error(f'{chart_yaml.filename}: No such file')
+    chart = chart_yaml.load()
+
+    if args.cray_service_globals:
+        values_yaml = YamlFile(args.chartdir / 'values.yaml')
+        if not values_yaml.exists():
+            parser.error(f'{values_yaml.filename}: No such file')
+        values = values_yaml.load()
+
+    # Update chart metadata
+    if args.name:
+        chart['name'] = args.name
+    if args.version:
+        chart['version'] = args.version
+    if args.app_version:
+        chart['appVersion'] = args.app_version
+    if args.image:
+        images = Annotations.get_yaml(chart, Annotations.IMAGES) or []
+        for (name, image) in args.image:
+            for i in images:
+                if i.get('name', '') == name:
+                    i['image'] = image
+                    break
+            else:
+                images.append({'name': name, 'image': image})
+        Annotations.set_yaml(chart, Annotations.IMAGES, images)
+    if args.license:
+        Annotations.set(chart, Annotations.LICENSE, args.license)
+
+    # Ensure global values for cray-service base chart are consistent
+    if args.cray_service_globals:
+        _global = values.setdefault('global', {})
+        if 'name' in chart:
+            _global.setdefault('chart', {})['name'] = chart['name']
+        if 'version' in chart:
+            _global.setdefault('chart', {})['version'] = chart['version']
+        if 'appVersion' in chart:
+            _global['appVersion'] = chart['appVersion']
+
+    # Save updates
+    chart_yaml.dump(chart)
+    if args.cray_service_globals:
+        values_yaml.dump(values)
+
+
+if __name__ == '__main__':
+    main()
