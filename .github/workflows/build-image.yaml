@@ -24,7 +24,7 @@ jobs:
         uses: docker/metadata-action@v3
         with:
           images: |
-            artifactory.algol60.net/csm-docker/${{ startsWith(github.ref, 'refs/tags/v') && "stable" || "unstable" }}/chart-metadata
+            artifactory.algol60.net/csm-docker/${{ startsWith(github.ref, 'refs/tags/v') && 'stable' || 'unstable' }}/chart-metadata
           tags: |
             type=schedule
             type=ref,event=branch
