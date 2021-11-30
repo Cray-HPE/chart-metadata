@@ -14,6 +14,7 @@ class YamlFile:
         self.filename = Path(filename)
         self._yaml = ruamel.yaml.YAML()
         self._yaml.indent(mapping=2, sequence=4, offset=2)
+        self._yaml.preserve_quotes = True
 
     def exists(self):
         return self.filename.exists() and self.filename.is_file()
@@ -35,6 +36,7 @@ class Annotations:
     LICENSE = 'artifacthub.io/license'
 
     _yaml = ruamel.yaml.YAML()
+    _yaml.preserve_quotes = True
 
     @classmethod
     def loads(cls, s):
